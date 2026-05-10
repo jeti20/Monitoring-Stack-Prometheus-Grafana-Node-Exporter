@@ -542,6 +542,24 @@ CI wykryje to **zanim** trafi na serwer — push zostanie oznaczony jako failed 
 
 ---
 
+### Czy CI blokuje push?
+
+**Nie** — GitHub Actions uruchamia się *po* pushu. Kod trafia do repozytorium niezależnie od wyniku CI. Żeby joby faktycznie blokowały wprowadzanie zmian, trzeba włączyć **branch protection rules**:
+
+`GitHub → Settings → Branches → Add branch ruleset → Require status checks to pass`
+
+Po skonfigurowaniu bezpośredni push do `main` jest odrzucany jeśli wymagane joby nie przeszły. W praktyce wymusza to pracę przez Pull Requesty — PR można zmergować dopiero gdy CI jest zielone.
+
+Bez branch protection CI pełni rolę informacyjną: widzisz czerwony X przy commicie, ale kod już jest w repo.
+
+---
+
+### Dlaczego zrezygnowano z walidacji dashboardów Grafany?
+
+Przetestowano oficjalne narzędzie `grafana/dashboard-linter`. Okazało się, że narzuca ono hardcoded konwencje nazewnictwa zmiennych (`$instance` zamiast `$node`, `datasource` zamiast `ds_prometheus`) które są specyficzne dla dashboardów pisanych pod standardy Grafana Labs. Community dashboard **Node Exporter Full** (ID: 1860) tych konwencji nie spełnia — linter generuje kilkaset błędów na pliku który działa poprawnie w Grafanie. Narzędzie nie nadaje się do walidacji zewnętrznych dashboardów.
+
+---
+
 ## Loki + Promtail — zbieranie logów
 
 ### Metryki vs logi — różnica
