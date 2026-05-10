@@ -1,11 +1,11 @@
+---
 name: CI
 
 on: [push, pull_request]
 
 jobs:
-  validate:
+  validate-prometheus:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v5
@@ -22,6 +22,12 @@ jobs:
       - name: Validate alert rules
         run: promtool check rules Prometheus/rules/*.yml
 
+  validate-alertmanager:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
       - name: Install Alertmanager
         run: |
           wget https://github.com/prometheus/alertmanager/releases/download/v0.28.1/alertmanager-0.28.1.linux-amd64.tar.gz
@@ -31,7 +37,20 @@ jobs:
       - name: Validate alertmanager.yml
         run: amtool check-config alertmanager/alertmanager.yml
 
+  validate-yaml:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Install yamllint
+        run: pip install yamllint
+
       - name: Validate YAML syntax
         run: |
-          pip install yamllint
-          yamllint Prometheus/prometheus.yml Prometheus/rules/*.yml alertmanager/alertmanager.yml docker-compose.yml grafana/provisioning/datasources/prometheus.yml grafana/provisioning/dashboards/dashboard.yml
+          yamllint Prometheus/prometheus.yml \
+                   Prometheus/rules/*.yml \
+                   alertmanager/alertmanager.yml \
+                   docker-compose.yml \
+                   grafana/provisioning/datasources/prometheus.yml \
+                   grafana/provisioning/dashboards/dashboard.yml
