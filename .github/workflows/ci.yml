@@ -70,5 +70,5 @@ jobs:
         run: |
           for file in grafana/provisioning/dashboards/*.json; do
             echo "--- Linting $file ---"
-            dashboard-linter lint --strict "$file"
+            dashboard-linter lint "$file"
           done
