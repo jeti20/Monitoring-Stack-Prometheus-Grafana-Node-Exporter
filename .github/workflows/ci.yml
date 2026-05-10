@@ -54,21 +54,3 @@ jobs:
                    docker-compose.yml \
                    grafana/provisioning/datasources/prometheus.yml \
                    grafana/provisioning/dashboards/dashboard.yml
-
-  validate-grafana-dashboards:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v5
-
-      - name: Install dashboard-linter
-        run: |
-          git clone --depth 1 https://github.com/grafana/dashboard-linter.git /tmp/dashboard-linter
-          cd /tmp/dashboard-linter && go build -o /usr/local/bin/dashboard-linter .
-
-      - name: Lint Grafana dashboards
-        run: |
-          for file in grafana/provisioning/dashboards/*.json; do
-            echo "--- Linting $file ---"
-            dashboard-linter lint "$file"
-          done

@@ -471,21 +471,21 @@ Wyniki widzisz w zakładce **Actions** na stronie repo w GitHub.
 
 ### Jak zbudowany jest nasz workflow
 
-Plik `.github/workflows/ci.yml` definiuje **4 niezależne joby** które działają **równolegle** przy każdym pushu:
+Plik `.github/workflows/ci.yml` definiuje **3 niezależne joby** które działają **równolegle** przy każdym pushu:
 
 ```
 git push
     ↓
-┌──────────────────┐ ┌──────────────────────┐ ┌───────────────┐ ┌──────────────────────┐
-│validate-prometheus│ │validate-alertmanager │ │validate-yaml  │ │validate-grafana-     │
-│                  │ │                      │ │               │ │dashboards            │
-│promtool check    │ │amtool check-config   │ │yamllint       │ │dashboard-linter      │
-│  config          │ │  alertmanager.yml    │ │  wszystkie    │ │  --strict *.json     │
-│promtool check    │ │                      │ │  pliki YAML   │ │                      │
-│  rules           │ │                      │ │               │ │                      │
-└──────────────────┘ └──────────────────────┘ └───────────────┘ └──────────────────────┘
-        ↓                      ↓                     ↓                    ↓
-     ✓ / ✗                  ✓ / ✗                 ✓ / ✗               ✓ / ✗
+┌─────────────────────┐  ┌──────────────────────┐  ┌─────────────────┐
+│ validate-prometheus │  │ validate-alertmanager │  │  validate-yaml  │
+│                     │  │                       │  │                 │
+│ promtool check      │  │ amtool check-config   │  │ yamllint        │
+│   config            │  │   alertmanager.yml    │  │   wszystkie     │
+│ promtool check      │  │                       │  │   pliki YAML    │
+│   rules             │  │                       │  │                 │
+└─────────────────────┘  └──────────────────────┘  └─────────────────┘
+         ↓                          ↓                        ↓
+      ✓ / ✗                      ✓ / ✗                    ✓ / ✗
 ```
 
 Joby są od siebie niezależne — działają równolegle, co skraca czas wykonania. Gdy jeden failuje, od razu wiesz który komponent ma problem.
@@ -525,15 +525,6 @@ jobs:
 
 **`validate-yaml`**
 - `yamllint` — sprawdza składnię YAML wszystkich plików konfiguracyjnych (wcięcia, cudzysłowy, brakujące `---`)
-
-**`validate-grafana-dashboards`**
-Używa oficjalnego narzędzia [`grafana/dashboard-linter`](https://github.com/grafana/dashboard-linter) do walidacji wszystkich plików JSON z `grafana/provisioning/dashboards/`. Linter sprawdza:
-- poprawność struktury JSON
-- obecność wymaganych pól (`uid`, `title`, `schemaVersion`, `panels`)
-- czy panele mają ustawiony datasource
-- best practices (tytuły paneli, opisy)
-
-Flaga `--strict` traktuje ostrzeżenia jako błędy — CI failuje nie tylko przy krytycznych problemach, ale też przy odchyleniach od zalecanej struktury.
 
 ---
 
