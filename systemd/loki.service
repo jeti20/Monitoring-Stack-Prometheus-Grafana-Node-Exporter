@@ -1,0 +1,18 @@
+[Unit]
+Description=Loki
+Documentation=https://grafana.com/docs/loki/latest/
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=loki
+Group=loki
+ExecStart=/usr/local/bin/loki \
+  --config.file=/etc/loki/loki.yml
+SyslogIdentifier=loki
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

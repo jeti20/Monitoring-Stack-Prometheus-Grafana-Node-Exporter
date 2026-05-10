@@ -1,50 +1,38 @@
 ---
 server:
-  # Port HTTP Promtaila — można odpytać o jego status i metryki
+  # Port HTTP Promtaila — status i metryki wewnętrzne
   http_listen_port: 9080
 
 positions:
-  # Promtail zapisuje tu dokąd doczytał każdy plik logów
-  # Dzięki temu po restarcie nie wysyła tych samych logów ponownie
-  filename: /tmp/positions.yaml
+  # Promtail zapamiętuje tu dokąd doczytał każdy plik logów
+  # Używamy /var/lib/promtail żeby przetrwać restart (nie /tmp)
+  filename: /var/lib/promtail/positions.yaml
 
 clients:
-  # Adres Loki do którego Promtail wysyła zebrane logi
-  - url: http://loki:3100/loki/api/v1/push
+  - url: http://localhost:3100/loki/api/v1/push
 
 scrape_configs:
-  # --- Logi kontenerów Docker ---
-  # docker_sd_configs odkrywa kontenery przez Docker API i automatycznie
-  # dodaje ich nazwy jako label — bez tego znamy tylko ID kontenera
-  - job_name: docker
-    docker_sd_configs:
-      - host: unix:///var/run/docker.sock
-        refresh_interval: 5s
-    relabel_configs:
-      # Wyciąga nazwę kontenera (np. "test-grafana-1") i zapisuje jako label
-      - source_labels: ['__meta_docker_container_name']
-        regex: '/(.+)'
-        target_label: container
-      # Promuje stream (stdout/stderr) do labela
-      - source_labels: ['__meta_docker_container_log_stream']
-        target_label: stream
-      - target_label: job
-        replacement: docker
-    pipeline_stages:
-      # Parsuje JSON w którym Docker opakowuje każdą linię logu
-      - json:
-          expressions:
-            output: log
-      # Ustawia treść logu jako właściwą wiadomość (zamiast surowego JSON)
-      - output:
-          source: output
-
-  # --- Logi systemowe hosta ---
+  # --- Logi systemowe z /var/log ---
+  # Zbiera syslog, auth.log, kern.log itp.
   - job_name: system
     static_configs:
       - targets:
           - localhost
         labels:
           job: system
-          # Zbiera wszystkie pliki .log z /var/log/ (syslog, auth.log itp.)
           __path__: /var/log/*.log
+
+  # --- Logi z journald (usługi systemd) ---
+  # Dzięki temu widzisz logi prometheus, loki itp. bez odczytywania plików
+  - job_name: journal
+    journal:
+      max_age: 12h
+      labels:
+        job: journal
+    relabel_configs:
+      # Nazwa unit systemd jako label — np. "prometheus.service"
+      - source_labels: ['__journal__systemd_unit']
+        target_label: unit
+      # Priorytet wiadomości (0=emerg … 7=debug)
+      - source_labels: ['__journal_priority_keyword']
+        target_label: level

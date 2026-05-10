@@ -33,12 +33,12 @@ schema_config:
 storage_config:
   tsdb_shipper:
     # Gdzie na dysku leżą pliki indeksu
-    active_index_directory: /loki/index
+    active_index_directory: /var/lib/loki/index
     # Cache indeksu przyspiesza odpytywanie
-    cache_location: /loki/index_cache
+    cache_location: /var/lib/loki/index_cache
   filesystem:
     # Gdzie na dysku leżą skompresowane bloki z logami
-    directory: /loki/chunks
+    directory: /var/lib/loki/chunks
 
 limits_config:
   # Odrzuca logi starsze niż 168h (7 dni) — zapobiega zaśmiecaniu bazy
