@@ -3,12 +3,26 @@
   "uid": "loki-logs",
   "schemaVersion": 38,
   "version": 1,
+  "editable": false,
+  "templating": {
+    "list": [
+      {
+        "name": "datasource",
+        "type": "datasource",
+        "query": "loki",
+        "label": "Data source",
+        "hide": 0,
+        "refresh": 1
+      }
+    ]
+  },
   "panels": [
     {
       "id": 1,
       "title": "Docker container logs",
+      "description": "Raw log lines from all Docker containers",
       "type": "logs",
-      "datasource": { "type": "loki", "uid": "loki" },
+      "datasource": { "type": "loki", "uid": "${datasource}" },
       "gridPos": { "x": 0, "y": 0, "w": 24, "h": 20 },
       "options": {
         "showTime": true,
@@ -20,22 +34,28 @@
       "targets": [
         {
           "refId": "A",
-          "datasource": { "type": "loki", "uid": "loki" },
+          "datasource": { "type": "loki", "uid": "${datasource}" },
           "expr": "{job=\"docker\"}"
         }
       ]
     },
     {
       "id": 2,
-      "title": "Log rate by container (logs/min)",
+      "title": "Log rate by container",
+      "description": "Number of log lines per second per container",
       "type": "timeseries",
-      "datasource": { "type": "loki", "uid": "loki" },
+      "datasource": { "type": "loki", "uid": "${datasource}" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "cps"
+        }
+      },
       "gridPos": { "x": 0, "y": 20, "w": 24, "h": 8 },
       "targets": [
         {
           "refId": "A",
-          "datasource": { "type": "loki", "uid": "loki" },
-          "expr": "sum by (container) (rate({job=\"docker\"}[1m]))",
+          "datasource": { "type": "loki", "uid": "${datasource}" },
+          "expr": "sum by (container) (rate({job=\"docker\"}[$__auto]))",
           "legendFormat": "{{container}}"
         }
       ]
