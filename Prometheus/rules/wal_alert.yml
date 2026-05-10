@@ -1,0 +1,11 @@
+groups:
+  - name: prometheus_wal
+    rules:
+      - alert: WalSizeExceeded
+        expr: prometheus_tsdb_wal_storage_size_bytes > 1048576
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "WAL Prometheusa przekroczył 1MB"
+          description: "Aktualny rozmiar WAL: {{ $value | humanize1024 }}B"
