@@ -527,13 +527,13 @@ jobs:
 - `yamllint` — sprawdza składnię YAML wszystkich plików konfiguracyjnych (wcięcia, cudzysłowy, brakujące `---`)
 
 **`validate-grafana-dashboards`**
-Trzy kroki walidacji plików JSON dashboardów w `grafana/provisioning/dashboards/`:
+Używa oficjalnego narzędzia [`grafana/dashboard-linter`](https://github.com/grafana/dashboard-linter) do walidacji wszystkich plików JSON z `grafana/provisioning/dashboards/`. Linter sprawdza:
+- poprawność struktury JSON
+- obecność wymaganych pól (`uid`, `title`, `schemaVersion`, `panels`)
+- czy panele mają ustawiony datasource
+- best practices (tytuły paneli, opisy)
 
-1. **Struktura JSON** — `jq empty` sprawdza czy plik jest poprawnym JSONem. Następnie weryfikuje obecność wymaganych pól: `title`, `uid`, `schemaVersion`, `panels`. Brak któregokolwiek powoduje błąd przy ładowaniu dashboardu przez Grafanę.
-
-2. **Zmienne `custom` mają pole `query`** — Grafana generuje opcje dropdown z pola `query`, nie z tablicy `options`. Brak `query` skutkuje pustym dropdownem — możesz tylko wpisywać wartości ręcznie. Ten krok wykrywa dokładnie ten błąd.
-
-3. **Spójność UID datasource** — porównuje UID-y datasource używane w dashboardach (`panels[].datasource.uid`) z UID-ami zadeklarowanymi w plikach provisioning (`grafana/provisioning/datasources/`). Niezgodność to główna przyczyna błędu `data source not found` przy starcie Grafany.
+Flaga `--strict` traktuje ostrzeżenia jako błędy — CI failuje nie tylko przy krytycznych problemach, ale też przy odchyleniach od zalecanej struktury.
 
 ---
 
