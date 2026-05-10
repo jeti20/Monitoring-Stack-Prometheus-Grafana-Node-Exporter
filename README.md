@@ -42,6 +42,13 @@ graph TB
 
     SMTP["Gmail SMTP\n─────────────\nsmtp.gmail.com:587\nTLS"]
 
+    subgraph CI["GitHub Actions CI (git push)"]
+        direction LR
+        J1["validate-prometheus\npromtool check config\npromtool check rules"]
+        J2["validate-alertmanager\namtool check-config"]
+        J3["validate-yaml\nyamllint"]
+    end
+
     NE -->|"HTTP scrape co 15s"| PROM
     PROM -->|"PromQL /api/v1/query"| GF
     PROM -->|"HTTP POST — firing alert"| AM
@@ -56,6 +63,10 @@ graph TB
     B1 -->|"HTTP"| GF
     B2 -->|"HTTP"| PROM
     B3 -->|"HTTP"| AM
+
+    CFG1 -.->|"walidacja"| J1
+    CFG2 -.->|"walidacja"| J2
+    CFG1 -.->|"walidacja"| J3
 ```
 
 ---
@@ -419,3 +430,92 @@ Alertmanager nie obsługuje natywnie podstawiania zmiennych środowiskowych w pl
 **App Password Gmail** — zamiast hasła do konta Google, generujesz dedykowane hasło aplikacji:
 `Konto Google → Zabezpieczenia → Weryfikacja dwuetapowa → Hasła do aplikacji`
 Wygenerowane 16-znakowe hasło wklejasz do pliku `alertmanager/secrets/gmail_password`.
+
+---
+
+## CI/CD — GitHub Actions
+
+### Co to jest GitHub Actions?
+
+GitHub Actions to system CI/CD wbudowany bezpośrednio w GitHub — nie musisz stawiać żadnego dodatkowego serwera (jak Jenkins). Konfiguracja jest plikiem YAML w repozytorium: `.github/workflows/ci.yml`.
+
+Gdy robisz `git push`, GitHub automatycznie:
+1. Uruchamia wirtualną maszynę z Ubuntu na swoich serwerach (tzw. **runner**)
+2. Pobiera kod z repozytorium
+3. Wykonuje zdefiniowane przez Ciebie kroki
+4. Zwraca wynik — zielony ptaszek lub czerwony X
+
+Wyniki widzisz w zakładce **Actions** na stronie repo w GitHub.
+
+---
+
+### Jak zbudowany jest nasz workflow
+
+Plik `.github/workflows/ci.yml` definiuje **3 niezależne joby** które działają **równolegle** przy każdym pushu:
+
+```
+git push
+    ↓
+┌─────────────────────┐  ┌──────────────────────┐  ┌─────────────────┐
+│ validate-prometheus │  │ validate-alertmanager │  │  validate-yaml  │
+│                     │  │                       │  │                 │
+│ promtool check      │  │ amtool check-config   │  │ yamllint        │
+│   config            │  │   alertmanager.yml    │  │   wszystkie     │
+│ promtool check      │  │                       │  │   pliki YAML    │
+│   rules             │  │                       │  │                 │
+└─────────────────────┘  └──────────────────────┘  └─────────────────┘
+         ↓                          ↓                        ↓
+      ✓ / ✗                      ✓ / ✗                    ✓ / ✗
+```
+
+Joby są od siebie niezależne — działają równolegle, co skraca czas wykonania. Gdy jeden failuje, od razu wiesz który komponent ma problem.
+
+---
+
+### Podstawowa struktura workflow
+
+```yaml
+name: CI                        # nazwa wyświetlana w zakładce Actions
+
+on: [push, pull_request]        # kiedy się uruchamia — przy każdym pushu i PR
+
+jobs:
+  validate-prometheus:          # nazwa jobu
+    runs-on: ubuntu-latest      # GitHub daje VM z Ubuntu
+
+    steps:
+      - uses: actions/checkout@v5   # pobiera kod repo na VM (gotowa akcja z marketplace)
+      - run: promtool check config  # Twoja komenda
+```
+
+**`uses`** — gotowa akcja z GitHub Marketplace. `actions/checkout` to oficjalna akcja która klonuje repozytorium na VM runnera. Bez tego kroku VM nie miałaby dostępu do Twoich plików.
+
+**`run`** — zwykła komenda shell którą wykonuje VM.
+
+---
+
+### Co sprawdza każdy job
+
+**`validate-prometheus`**
+- `promtool check config Prometheus/prometheus.yml` — sprawdza czy główny config Prometheusa jest poprawny (składnia, referencje do plików reguł)
+- `promtool check rules Prometheus/rules/*.yml` — sprawdza składnię reguł alertów (PromQL, wymagane pola)
+
+**`validate-alertmanager`**
+- `amtool check-config alertmanager/alertmanager.yml` — sprawdza poprawność konfiguracji Alertmanagera (routing, receivers)
+
+**`validate-yaml`**
+- `yamllint` — sprawdza składnię YAML wszystkich plików konfiguracyjnych (wcięcia, cudzysłowy, brakujące `---`)
+
+---
+
+### Dlaczego to ważne?
+
+Bez CI możesz przypadkowo wypchnąć błędny plik i położyć działający stos. Przykład:
+
+```yaml
+# literówka w prometheus.yml
+scrape_interval: 15s
+evaluaton_interval: 15s   # błąd — Prometheus nie wystartuje
+```
+
+CI wykryje to **zanim** trafi na serwer — push zostanie oznaczony jako failed i wiesz że coś jest nie tak.
