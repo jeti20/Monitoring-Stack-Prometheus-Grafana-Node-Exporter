@@ -1,4 +1,4 @@
-# Monitoring Stack — Prometheus + Grafana + Node Exporter
+# Monitoring Stack - Prometheus + Grafana + Node Exporter
 
 ## Stos
 
@@ -34,7 +34,7 @@ docker compose down
 
 ## Persystencja danych (volumes)
 
-Kontenery są efemeryczne — bez volumes dane znikają po restarcie. Używamy **bind mountów** (ścieżki względne), dzięki czemu dane lądują bezpośrednio w folderze projektu.
+Kontenery są efemeryczne - bez volumes dane znikają po restarcie. Używamy **bind mountów** (ścieżki względne), dzięki czemu dane lądują bezpośrednio w folderze projektu.
 
 ```yaml
 volumes:
@@ -42,7 +42,7 @@ volumes:
   - ./data/grafana:/var/lib/grafana
 ```
 
-Alternatywa: named volumes (`prometheus_data:/prometheus`) — Docker zarządza lokalizacją sam, dane lądują w:
+Alternatywa: named volumes (`prometheus_data:/prometheus`) - Docker zarządza lokalizacją sam, dane lądują w:
 - Windows: wewnątrz WSL2/Hyper-V VM (`\\wsl$\docker-desktop-data\data\docker\volumes\`)
 - Linux: `/var/lib/docker/volumes/`
 
@@ -55,10 +55,10 @@ Bind mounty są czytelniejsze i łatwiejsze do backupu.
 Docker Compose tworzy wspólną sieć dla wszystkich serwisów. Kontenery komunikują się przez **nazwę serwisu**, nie przez `localhost`.
 
 ```
-# ŹLE — localhost to sam kontener Grafany
+# ŹLE - localhost to sam kontener Grafany
 http://localhost:9090
 
-# DOBRZE — Docker DNS rozwiązuje nazwę serwisu
+# DOBRZE - Docker DNS rozwiązuje nazwę serwisu
 http://prometheus:9090
 
 # lub przez hostname jeśli ustawiony
@@ -71,11 +71,11 @@ Każdy kontener ma własny, izolowany stos sieciowy. `localhost` wewnątrz konte
 
 ## Jak Prometheus przechowuje dane (TSDB)
 
-Prometheus używa własnej bazy szeregów czasowych (TSDB — Time Series Database). Dane w `./data/prometheus/`:
+Prometheus używa własnej bazy szeregów czasowych (TSDB - Time Series Database). Dane w `./data/prometheus/`:
 
 ```
 data/prometheus/
-├── wal/               # Write-Ahead Log — świeże metryki trafiają tutaj
+├── wal/               # Write-Ahead Log - świeże metryki trafiają tutaj
 │   ├── 00000000
 │   └── 00000001
 ├── lock               # plik blokady (jeden proces na raz)
@@ -84,12 +84,12 @@ data/prometheus/
 ```
 
 **WAL (Write-Ahead Log):**
-Wszystkie nowe metryki trafiają najpierw do WAL. Jest to bufor zapisu — szybki, append-only. Po około 2 godzinach Prometheus kompaktuje dane z WAL do bloków i czyści WAL.
+Wszystkie nowe metryki trafiają najpierw do WAL. Jest to bufor zapisu - szybki, append-only. Po około 2 godzinach Prometheus kompaktuje dane z WAL do bloków i czyści WAL.
 
 **Bloki:**
 Niezmienne, skompaktowane fragmenty danych historycznych. Pojawiają się dopiero po ~2 godzinach działania. `prometheus_tsdb_storage_blocks_bytes` pokazuje 0 dopóki pierwszy blok nie powstanie.
 
-**Baza jest append-only** — nie edytujesz istniejących danych. Możesz tylko usuwać serie przez API:
+**Baza jest append-only** - nie edytujesz istniejących danych. Możesz tylko usuwać serie przez API:
 ```
 POST http://localhost:9090/api/v1/admin/tsdb/delete_series?match[]=nazwa_metryki
 ```
@@ -163,7 +163,7 @@ TSDB Status: `http://localhost:9090/tsdb-status`
 
 ---
 
-## Node Exporter — co zbiera i gdzie
+## Node Exporter - co zbiera i gdzie
 
 Node Exporter zbiera metryki systemu Linux przez wirtualne systemy plików:
 
@@ -179,7 +179,7 @@ command:
   - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
 ```
 
-**Na serwerze Linux:** zbiera metryki prawdziwego hosta — działa natywnie.
+**Na serwerze Linux:** zbiera metryki prawdziwego hosta - działa natywnie.
 
 **Na Windows z Docker Desktop:** zbiera metryki **maszyny wirtualnej** (WSL2 lub Hyper-V), nie samego Windowsa. Wynika to z architektury Docker na Windows:
 
@@ -198,7 +198,7 @@ command:
 └─────────────────────────────────────────────────┘
 ```
 
-Kontenery to technologia Linuxowa (`namespaces`, `cgroups`). Na Windows Docker Desktop uruchamia jedną ukrytą VM z Linuxem — wszystkie kontenery działają w tej jednej VM, nie bezpośrednio na Windows.
+Kontenery to technologia Linuxowa (`namespaces`, `cgroups`). Na Windows Docker Desktop uruchamia jedną ukrytą VM z Linuxem - wszystkie kontenery działają w tej jednej VM, nie bezpośrednio na Windows.
 
 Do monitorowania hosta Windows potrzebny jest **windows_exporter**:
 ```powershell
@@ -215,4 +215,4 @@ docker --version
 docker compose version
 ```
 
-Na Linux nie ma pośredniej VM — Docker Engine działa bezpośrednio na jądrze hosta. Node Exporter zbiera wtedy prawdziwe metryki serwera.
+Na Linux nie ma pośredniej VM - Docker Engine działa bezpośrednio na jądrze hosta. Node Exporter zbiera wtedy prawdziwe metryki serwera.
