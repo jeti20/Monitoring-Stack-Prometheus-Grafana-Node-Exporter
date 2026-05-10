@@ -21,3 +21,12 @@ jobs:
 
       - name: Validate alert rules
         run: promtool check rules Prometheus/rules/*.yml
+
+      - name: Install Alertmanager
+        run: |
+          wget https://github.com/prometheus/alertmanager/releases/download/v0.28.1/alertmanager-0.28.1.linux-amd64.tar.gz
+          tar xvf alertmanager-0.28.1.linux-amd64.tar.gz
+          sudo mv alertmanager-0.28.1.linux-amd64/amtool /usr/local/bin/
+
+      - name: Validate alertmanager.yml
+        run: amtool check-config alertmanager/alertmanager.yml
