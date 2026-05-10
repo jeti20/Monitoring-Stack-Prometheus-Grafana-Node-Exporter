@@ -1,3 +1,4 @@
+---
 groups:
   - name: prometheus_wal
     rules:

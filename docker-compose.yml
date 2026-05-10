@@ -1,3 +1,4 @@
+---
 services:
   node_exporter:
     image: quay.io/prometheus/node-exporter:latest
