@@ -30,3 +30,8 @@ jobs:
 
       - name: Validate alertmanager.yml
         run: amtool check-config alertmanager/alertmanager.yml
+
+      - name: Validate YAML syntax
+        run: |
+          pip install yamllint
+          yamllint Prometheus/prometheus.yml Prometheus/rules/*.yml alertmanager/alertmanager.yml docker-compose.yml grafana/provisioning/datasources/prometheus.yml grafana/provisioning/dashboards/dashboard.yml
