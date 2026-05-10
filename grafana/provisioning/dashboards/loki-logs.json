@@ -1,0 +1,46 @@
+{
+  "title": "Loki Logs",
+  "uid": "loki-logs",
+  "schemaVersion": 38,
+  "version": 1,
+  "panels": [
+    {
+      "id": 1,
+      "title": "Docker container logs",
+      "type": "logs",
+      "datasource": { "type": "loki", "uid": "loki" },
+      "gridPos": { "x": 0, "y": 0, "w": 24, "h": 20 },
+      "options": {
+        "showTime": true,
+        "showLabels": true,
+        "wrapLogMessage": true,
+        "sortOrder": "Descending",
+        "enableLogDetails": true
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "loki", "uid": "loki" },
+          "expr": "{job=\"docker\"}"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Log rate by container (logs/min)",
+      "type": "timeseries",
+      "datasource": { "type": "loki", "uid": "loki" },
+      "gridPos": { "x": 0, "y": 20, "w": 24, "h": 8 },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "loki", "uid": "loki" },
+          "expr": "sum by (container) (rate({job=\"docker\"}[1m]))",
+          "legendFormat": "{{container}}"
+        }
+      ]
+    }
+  ],
+  "time": { "from": "now-30m", "to": "now" },
+  "refresh": "30s"
+}

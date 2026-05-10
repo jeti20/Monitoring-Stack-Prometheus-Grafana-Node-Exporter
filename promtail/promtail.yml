@@ -1,0 +1,50 @@
+---
+server:
+  # Port HTTP Promtaila — można odpytać o jego status i metryki
+  http_listen_port: 9080
+
+positions:
+  # Promtail zapisuje tu dokąd doczytał każdy plik logów
+  # Dzięki temu po restarcie nie wysyła tych samych logów ponownie
+  filename: /tmp/positions.yaml
+
+clients:
+  # Adres Loki do którego Promtail wysyła zebrane logi
+  - url: http://loki:3100/loki/api/v1/push
+
+scrape_configs:
+  # --- Logi kontenerów Docker ---
+  # docker_sd_configs odkrywa kontenery przez Docker API i automatycznie
+  # dodaje ich nazwy jako label — bez tego znamy tylko ID kontenera
+  - job_name: docker
+    docker_sd_configs:
+      - host: unix:///var/run/docker.sock
+        refresh_interval: 5s
+    relabel_configs:
+      # Wyciąga nazwę kontenera (np. "test-grafana-1") i zapisuje jako label
+      - source_labels: ['__meta_docker_container_name']
+        regex: '/(.+)'
+        target_label: container
+      # Promuje stream (stdout/stderr) do labela
+      - source_labels: ['__meta_docker_container_log_stream']
+        target_label: stream
+      - target_label: job
+        replacement: docker
+    pipeline_stages:
+      # Parsuje JSON w którym Docker opakowuje każdą linię logu
+      - json:
+          expressions:
+            output: log
+      # Ustawia treść logu jako właściwą wiadomość (zamiast surowego JSON)
+      - output:
+          source: output
+
+  # --- Logi systemowe hosta ---
+  - job_name: system
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: system
+          # Zbiera wszystkie pliki .log z /var/log/ (syslog, auth.log itp.)
+          __path__: /var/log/*.log

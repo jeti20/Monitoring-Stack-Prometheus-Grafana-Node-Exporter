@@ -1,4 +1,4 @@
-# Monitoring Stack — Prometheus + Grafana + Node Exporter + Alertmanager
+# Monitoring Stack — Prometheus + Grafana + Node Exporter + Alertmanager + Loki + Promtail
 
 ## Stos
 
@@ -6,8 +6,10 @@
 |---|---|---|
 | node_exporter | 9100 | zbiera metryki systemu (CPU, RAM, dysk, sieć) |
 | prometheus | 9090 | scrape metryk, przechowywanie TSDB, ewaluacja reguł alertów |
-| grafana | 3000 | wizualizacja |
+| grafana | 3000 | wizualizacja metryk i logów |
 | alertmanager | 9093 | odbiera alerty od Prometheusa, wysyła powiadomienia (email) |
+| loki | 3100 | agregacja i przechowywanie logów |
+| promtail | 9080 | agent zbierający logi i wysyłający je do Loki |
 
 ---
 
@@ -28,19 +30,24 @@ graph TB
             PROM["Prometheus\n─────────────\nPort: 9090\nScrape · TSDB · Ewaluacja reguł"]
             AM["Alertmanager\n─────────────\nPort: 9093\nRouting · Grouping · Silencing"]
             GF["Grafana\n─────────────\nPort: 3000\nDashboardy · Wizualizacja"]
+            LOKI["Loki\n─────────────\nPort: 3100\nAggregacja · Przechowywanie logów"]
+            PT["Promtail\n─────────────\nPort: 9080\nAgent zbierający logi"]
         end
 
         subgraph VOLUMES["Pliki lokalne (bind mount)"]
             direction TB
             DB1[("data/prometheus\nWAL · Bloki TSDB\nRetencja: 7 dni")]
             DB2[("data/grafana\nStan · Pluginy")]
+            DB3[("data/loki\nChunki logów · Indeks")]
             CFG1["Prometheus/\nprometheus.yml\nrules/wal_alert.yml"]
             CFG2["alertmanager/\nalertmanager.yml\nsecrets/gmail_password"]
-            CFG3["grafana/provisioning/\ndatasources/prometheus.yml\ndashboards/dashboard.yml\ndashboards/node-exporter.json"]
+            CFG3["grafana/provisioning/\ndatasources/prometheus.yml\ndashboards/"]
+            CFG4["loki/loki.yml\npromtail/promtail.yml"]
         end
     end
 
     SMTP["Gmail SMTP\n─────────────\nsmtp.gmail.com:587\nTLS"]
+    DOCKER_SOCK[("/var/run/docker.sock\nDocker API")]
 
     subgraph CI["GitHub Actions CI (git push)"]
         direction LR
@@ -54,11 +61,18 @@ graph TB
     PROM -->|"HTTP POST — firing alert"| AM
     AM -->|"SMTP TLS"| SMTP
 
+    PT -->|"HTTP POST /loki/api/v1/push"| LOKI
+    LOKI -->|"LogQL /loki/api/v1/query"| GF
+    DOCKER_SOCK -.->|"Docker API — nazwy kontenerów"| PT
+
     PROM <-->|"R/W"| DB1
     PROM <-->|"R"| CFG1
     GF <-->|"R/W"| DB2
     GF -->|"R — przy starcie"| CFG3
     AM <-->|"R"| CFG2
+    LOKI <-->|"R/W"| DB3
+    LOKI <-->|"R"| CFG4
+    PT <-->|"R"| CFG4
 
     B1 -->|"HTTP"| GF
     B2 -->|"HTTP"| PROM
@@ -95,16 +109,22 @@ docker compose down
 │   ├── alertmanager.yml          # konfiguracja Alertmanagera (receiver, smtp)
 │   └── secrets/
 │       └── gmail_password        # hasło App Password (w .gitignore — nie trafia do gita)
+├── loki/
+│   └── loki.yml                  # konfiguracja Loki (schema, storage, limits)
+├── promtail/
+│   └── promtail.yml              # konfiguracja Promtaila (skąd zbierać logi, jak je parsować)
 ├── grafana/
 │   └── provisioning/
 │       ├── datasources/
-│       │   └── prometheus.yml    # automatyczna konfiguracja datasource Prometheusa
+│       │   └── prometheus.yml    # automatyczna konfiguracja datasource Prometheusa i Loki
 │       └── dashboards/
 │           ├── dashboard.yml     # mówi Grafanie gdzie szukać plików JSON z dashboardami
-│           └── node-exporter.json # dashboard Node Exporter Full (ID: 1860 z grafana.com)
+│           ├── node-exporter.json # dashboard Node Exporter Full (ID: 1860 z grafana.com)
+│           └── loki-logs.json    # dashboard logów Docker z podziałem na kontenery
 └── data/
     ├── prometheus/               # dane TSDB Prometheusa (bind mount)
-    └── grafana/                  # stan Grafany — pluginy, sesje (bind mount)
+    ├── grafana/                  # stan Grafany — pluginy, sesje (bind mount)
+    └── loki/                     # chunki logów i indeks Loki (bind mount)
 ```
 
 ### Za co odpowiada każdy plik
@@ -506,6 +526,15 @@ jobs:
 **`validate-yaml`**
 - `yamllint` — sprawdza składnię YAML wszystkich plików konfiguracyjnych (wcięcia, cudzysłowy, brakujące `---`)
 
+**`validate-grafana-dashboards`**
+Trzy kroki walidacji plików JSON dashboardów w `grafana/provisioning/dashboards/`:
+
+1. **Struktura JSON** — `jq empty` sprawdza czy plik jest poprawnym JSONem. Następnie weryfikuje obecność wymaganych pól: `title`, `uid`, `schemaVersion`, `panels`. Brak któregokolwiek powoduje błąd przy ładowaniu dashboardu przez Grafanę.
+
+2. **Zmienne `custom` mają pole `query`** — Grafana generuje opcje dropdown z pola `query`, nie z tablicy `options`. Brak `query` skutkuje pustym dropdownem — możesz tylko wpisywać wartości ręcznie. Ten krok wykrywa dokładnie ten błąd.
+
+3. **Spójność UID datasource** — porównuje UID-y datasource używane w dashboardach (`panels[].datasource.uid`) z UID-ami zadeklarowanymi w plikach provisioning (`grafana/provisioning/datasources/`). Niezgodność to główna przyczyna błędu `data source not found` przy starcie Grafany.
+
 ---
 
 ### Dlaczego to ważne?
@@ -519,3 +548,244 @@ evaluaton_interval: 15s   # błąd — Prometheus nie wystartuje
 ```
 
 CI wykryje to **zanim** trafi na serwer — push zostanie oznaczony jako failed i wiesz że coś jest nie tak.
+
+---
+
+## Loki + Promtail — zbieranie logów
+
+### Metryki vs logi — różnica
+
+Prometheus zbiera **metryki** — liczby agregowane w czasie (CPU 72%, liczba requestów, rozmiar kolejki). Loki zbiera **logi** — surowe teksty zdarzeń z konkretnym timestampem. Razem dają pełny obraz systemu: metryki mówią *że* coś się dzieje, logi mówią *dlaczego*.
+
+```
+Metryki (Prometheus):           Logi (Loki):
+node_cpu_seconds_total 0.72     2024-01-15 12:34:56 ERROR connection refused
+http_requests_total 1204        2024-01-15 12:34:57 WARN retry attempt 1/3
+memory_used_bytes 2147483648    2024-01-15 12:34:58 ERROR max retries exceeded
+```
+
+Loki jest celowo prostszy niż Elasticsearch — **nie indeksuje treści logów**, tylko labele. Dzięki temu jest tani w utrzymaniu i szybko startuje.
+
+---
+
+### Pipeline zbierania logów
+
+```
+Kontenery Docker
+│  (piszą logi do stdout/stderr)
+│
+▼
+/var/lib/docker/containers/<id>/<id>-json.log
+│  (Docker zapisuje każdy log jako linię JSON)
+│
+▼
+Promtail  (agent działający jako kontener)
+│  1. Docker API → odkrywa kontenery i ich nazwy
+│  2. Czyta pliki logów z dysku
+│  3. Parsuje JSON Dockera → wyciąga treść logu
+│  4. Dodaje labele: job, container, stream
+│  5. Wysyła partie logów do Loki przez HTTP POST
+│
+▼
+Loki  (port 3100)
+│  1. Odbiera logi od Promtaila
+│  2. Zapisuje chunki na dysk (/loki/chunks)
+│  3. Buduje indeks TSDB po labelach (/loki/index)
+│
+▼
+Grafana  (zapytania LogQL)
+```
+
+---
+
+### Format logów Dockera i co robi Promtail
+
+Docker opakowuje każdą linię stdout/stderr kontenera w JSON:
+
+```json
+{"log":"2024-01-15T12:34:56Z level=info msg=\"scrape complete\"\n","stream":"stdout","time":"2024-01-15T12:34:56.123456789Z"}
+```
+
+Promtail musi ten JSON rozpakować. Pipeline w `promtail.yml`:
+
+```yaml
+pipeline_stages:
+  - json:
+      expressions:
+        output: log     # wyciąga pole "log" = treść logu
+  - output:
+      source: output    # ustawia treść jako wiadomość (zamiast surowego JSON)
+```
+
+Bez tagu `output` Loki przechowywałby cały JSON jako treść logu — ciężko to czytać w Grafanie.
+
+---
+
+### Jak Promtail odkrywa kontenery (`docker_sd_configs`)
+
+Pierwotna konfiguracja używała `static_configs` z glob pattern `/*/*-json.log`. Problem: Promtail widział pliki kontenerów, ale nie znał ich nazw — tylko ID (np. `a3f8c2d1...`). W Grafanie nie wiadomo było który log należy do Grafany, a który do Prometheusa.
+
+Rozwiązanie — `docker_sd_configs`:
+
+```yaml
+docker_sd_configs:
+  - host: unix:///var/run/docker.sock
+    refresh_interval: 5s
+relabel_configs:
+  - source_labels: ['__meta_docker_container_name']
+    regex: '/(.+)'
+    target_label: container
+  - source_labels: ['__meta_docker_container_log_stream']
+    target_label: stream
+```
+
+Promtail pyta Docker API (przez socket) o listę uruchomionych kontenerów. Docker zwraca metadane każdego kontenera — w tym nazwę (`__meta_docker_container_name`). `relabel_configs` kopiuje tę metadaną do labela `container`. Dzięki temu w Grafanie można filtrować logi konkretnie po serwisie: `{container="test-grafana-1"}`.
+
+Wymaga to zamontowania socketu Dockera:
+
+```yaml
+# docker-compose.yml
+volumes:
+  - /var/run/docker.sock:/var/run/docker.sock:ro
+```
+
+---
+
+### Labele w Loki — co indeksować, a czego nie
+
+Loki indeksuje tylko **labele** (nie treść logów). Labele są kluczem do wydajności — im mniej, tym lepiej. Zbyt dużo labeli z wysoką kardynalnością (np. `user_id`, `request_id`) powoduje eksplozję liczby strumieni i spowalnia Loki.
+
+W tym projekcie używamy minimalnego zestawu:
+
+| Label | Wartości | Po co |
+|---|---|---|
+| `job` | `docker`, `system` | rozróżnienie źródła logów |
+| `container` | np. `test-grafana-1` | filtrowanie po serwisie |
+| `stream` | `stdout`, `stderr` | stderr to zazwyczaj błędy |
+
+**Złe praktyki:**
+```yaml
+# NIE rób tego — każdy request tworzy nowy strumień
+labels:
+  request_id: "abc-123-def"
+  user_id: "42"
+```
+
+**Dobre praktyki:**
+```yaml
+# Treść logu filtruj przez LogQL, nie przez labele
+labels:
+  job: docker
+  container: my-app
+# Filtrowanie po poziomie logu przez line filter:
+# {job="docker"} |~ "(?i)error"
+```
+
+---
+
+### LogQL — podstawowe zapytania
+
+LogQL to język zapytań Loki, analogiczny do PromQL. Wszystkie zapytania zaczynają się od selektora strumienia w `{}`:
+
+```logql
+# Wszystkie logi Docker
+{job="docker"}
+
+# Logi konkretnego kontenera
+{job="docker", container="test-grafana-1"}
+
+# Tylko logi z stderr (zazwyczaj błędy)
+{job="docker", stream="stderr"}
+
+# Filtrowanie treści — case-insensitive grep
+{job="docker"} |~ "(?i)error"
+
+# Wykluczenie linii
+{job="docker"} != "health check"
+
+# Parsowanie JSON w treści logu
+{job="docker"} | json | level="error"
+
+# Liczba logów na minutę per kontener
+sum by (container) (rate({job="docker"}[1m]))
+```
+
+`|~` to filtr regex, `|=` to filtr dosłowny, `!=` to wykluczenie. Filtry treści działają na CPU Loki w czasie zapytania — nie są indeksowane — dlatego warto najpierw zawęzić selector `{}`.
+
+---
+
+### Przechowywanie danych Loki
+
+```
+data/loki/
+├── chunks/     # skompresowane bloki logów (Snappy)
+├── index/      # indeks TSDB po labelach
+└── index_cache/ # cache indeksu
+```
+
+Loki przechowuje treść logów skompresowaną (Snappy), co daje bardzo dobry stosunek kompresji dla tekstu. Indeks zawiera tylko labele i offsety do chunków — dlatego Loki jest tak oszczędny w porównaniu do Elasticsearch który indeksuje każde słowo.
+
+Retencja konfigurowana jest przez `limits_config` w `loki.yml`:
+
+```yaml
+limits_config:
+  reject_old_samples: true
+  reject_old_samples_max_age: 168h   # 7 dni
+```
+
+---
+
+### Grafana Provisioning — datasource Loki i problem z UID
+
+Grafana identyfikuje datasource wewnętrznie przez **UID** (unikalny identyfikator). Przy pierwszym starcie bez konfiguracji, Grafana nadaje Loki losowy UID (np. `P8E80F9AEF21F6940`) i zapisuje go w wewnętrznej bazie SQLite w `data/grafana/`.
+
+Problem pojawia się gdy chcesz provisioning dashboard który odwołuje się do Loki przez konkretny UID:
+
+```json
+"datasource": { "type": "loki", "uid": "loki" }
+```
+
+Jeśli `data/grafana` zawiera już Loki z innym UID — Grafana przy starcie zgłasza błąd `data source not found` i nie wstaje.
+
+**Rozwiązanie:** Ustawić `uid: loki` w provisioning **przed** pierwszym uruchomieniem, lub wyczyścić `data/grafana` jeśli Grafana już działała bez tego UID:
+
+```yaml
+# grafana/provisioning/datasources/prometheus.yml
+- name: Loki
+  type: loki
+  url: http://loki:3100
+  uid: loki          # jawny UID — dashboard JSON musi używać tego samego
+```
+
+```powershell
+docker compose down
+Remove-Item -Recurse -Force .\data\grafana   # czyści SQLite ze starym UID
+docker compose up -d                         # Grafana startuje od zera z uid: loki
+```
+
+Po wyczyszczeniu `data/grafana` Grafana traci lokalne ustawienia (pluginy, sesje użytkownika), ale wszystko co jest w provisioning (datasource, dashboardy) wraca automatycznie przy starcie.
+
+---
+
+### Dobre praktyki z Loki i Promtail
+
+**1. Minimalna liczba labeli**
+Dodawaj tylko labele po których faktycznie filtrujesz. Każda unikalna kombinacja labelów = osobny strumień = więcej pamięci i plików.
+
+**2. Filtruj przez treść, nie przez labele**
+Poziom logu (ERROR/WARN/INFO) trzymaj w treści logu i filtruj przez `|~ "(?i)error"`. Nie twórz labela `level` chyba że Twoja aplikacja go loguje strukturalnie (JSON).
+
+**3. `stdout` zamiast pliku**
+Aplikacje w kontenerach powinny pisać logi na `stdout`/`stderr`. Docker automatycznie przechwytuje stdout i zapisuje do pliku JSON w `/var/lib/docker/containers/`. Unikaj pisania do pliku wewnątrz kontenera — Promtail i tak to zbierze, ale tracisz `stream` label.
+
+**4. Pipeline `output` zawsze na końcu**
+Jeśli parsujemy JSON Dockera, zawsze kończ pipeline stagiem `output` który ustawia treść logu. Bez tego Grafana pokaże surowy JSON zamiast wiadomości.
+
+**5. `reject_old_samples: true`**
+Bez tego Loki przyjmuje logi z przeszłości (np. po restarcie kontenera który zaległe logi). Może to powodować problemy z kompaktowaniem i niespójnością indeksu. Z tym ustawieniem odrzuca próbki starsze niż `reject_old_samples_max_age`.
+
+**6. `user: root` dla Loki tylko gdy konieczne**
+Loki domyślnie działa jako użytkownik `10001`. Na bind mountach (`./data/loki:/loki`) katalog musi mieć odpowiednie uprawnienia. Najprościej uruchomić z `user: root` w środowisku dev — na produkcji lepiej ustawić właściciela katalogu: `chown -R 10001:10001 data/loki`.
+
+**7. Nie używaj Loki jako Elasticsearch**
+Loki nie jest zaprojektowany do full-text search po nieindeksowanej treści na dużych wolumenach. Dla milionów logów dziennie potrzebujesz indeksowania treści (Elasticsearch) lub osobnej warstwy cache. Loki świetnie sprawdza się w środowiskach do ~100GB/dzień logów gdzie liczy się koszt i prostota.

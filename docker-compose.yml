@@ -35,6 +35,29 @@ services:
     command:
       - '--config.file=/etc/alertmanager/alertmanager.yml'
 
+  loki:
+    image: grafana/loki:latest
+    user: root
+    ports:
+      - 3100:3100
+    volumes:
+      - ./loki:/etc/loki
+      - ./data/loki:/loki
+    command:
+      - '--config.file=/etc/loki/loki.yml'
+
+  promtail:
+    image: grafana/promtail:latest
+    ports:
+      - 9080:9080
+    volumes:
+      - ./promtail:/etc/promtail
+      - /var/log:/var/log:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    command:
+      - '--config.file=/etc/promtail/promtail.yml'
+
   grafana:
     image: grafana/grafana:latest
     ports:

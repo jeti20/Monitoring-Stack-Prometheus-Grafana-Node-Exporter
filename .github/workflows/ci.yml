@@ -54,3 +54,63 @@ jobs:
                    docker-compose.yml \
                    grafana/provisioning/datasources/prometheus.yml \
                    grafana/provisioning/dashboards/dashboard.yml
+
+  validate-grafana-dashboards:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Validate dashboard JSON structure
+        run: |
+          for file in grafana/provisioning/dashboards/*.json; do
+            echo "--- Checking $file ---"
+
+            # Poprawny JSON
+            jq empty "$file" || { echo "FAIL: invalid JSON in $file"; exit 1; }
+
+            # Wymagane pola
+            jq -e '.title'         "$file" > /dev/null || { echo "FAIL: missing .title in $file"; exit 1; }
+            jq -e '.uid'           "$file" > /dev/null || { echo "FAIL: missing .uid in $file"; exit 1; }
+            jq -e '.schemaVersion' "$file" > /dev/null || { echo "FAIL: missing .schemaVersion in $file"; exit 1; }
+            jq -e '.panels'        "$file" > /dev/null || { echo "FAIL: missing .panels in $file"; exit 1; }
+
+            echo "OK: $file"
+          done
+
+      - name: Check custom variables have query field
+        run: |
+          for file in grafana/provisioning/dashboards/*.json; do
+            MISSING=$(jq -r '
+              .templating.list[]?
+              | select(.type == "custom" and (.query == null or .query == ""))
+              | .name
+            ' "$file")
+            if [ -n "$MISSING" ]; then
+              echo "FAIL: custom variable(s) missing query field in $file: $MISSING"
+              exit 1
+            fi
+          done
+          echo "OK: all custom variables have query field"
+
+      - name: Check datasource UID consistency
+        run: |
+          # Zbiera UIDs zadeklarowane w provisioning datasources
+          DECLARED_UIDS=$(grep -r '^\s*uid:' grafana/provisioning/datasources/ | awk '{print $2}' | sort -u)
+
+          # Szuka UID-ów używanych w dashboardach
+          for file in grafana/provisioning/dashboards/*.json; do
+            USED_UIDS=$(jq -r '
+              [.panels[]?.datasource.uid,
+               .panels[]?.targets[]?.datasource.uid]
+              | .[]? | select(. != null and . != "")
+            ' "$file" | sort -u)
+
+            for uid in $USED_UIDS; do
+              if ! echo "$DECLARED_UIDS" | grep -qx "$uid"; then
+                echo "FAIL: dashboard $file references datasource uid '$uid' not found in provisioning"
+                exit 1
+              fi
+            done
+          done
+          echo "OK: all datasource UIDs consistent"

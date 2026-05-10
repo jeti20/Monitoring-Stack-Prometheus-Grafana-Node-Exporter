@@ -1,0 +1,46 @@
+---
+# Wyłącza uwierzytelnianie — każdy może pisać i czytać logi (ok dla lokalnego środowiska)
+auth_enabled: false
+
+server:
+  # Port na którym Loki nasłuchuje — Promtail wysyła tu logi, Grafana stąd je czyta
+  http_listen_port: 3100
+
+ingester:
+  lifecycler:
+    ring:
+      kvstore:
+        # Przechowuje stan klastra w pamięci — wystarczy dla jednej instancji
+        store: inmemory
+      # Jeden węzeł Loki — brak replikacji (środowisko lokalne)
+      replication_factor: 1
+
+schema_config:
+  configs:
+    - from: 2024-01-01
+      # Silnik indeksowania logów — tsdb to nowszy, wydajniejszy format
+      store: tsdb
+      # Gdzie fizycznie leżą dane — filesystem = lokalny dysk
+      object_store: filesystem
+      # Wersja schematu — v13 to aktualnie zalecana
+      schema: v13
+      index:
+        # Prefix nazw plików indeksu
+        prefix: index_
+        # Jeden plik indeksu na dobę
+        period: 24h
+
+storage_config:
+  tsdb_shipper:
+    # Gdzie na dysku leżą pliki indeksu
+    active_index_directory: /loki/index
+    # Cache indeksu przyspiesza odpytywanie
+    cache_location: /loki/index_cache
+  filesystem:
+    # Gdzie na dysku leżą skompresowane bloki z logami
+    directory: /loki/chunks
+
+limits_config:
+  # Odrzuca logi starsze niż 168h (7 dni) — zapobiega zaśmiecaniu bazy
+  reject_old_samples: true
+  reject_old_samples_max_age: 168h
