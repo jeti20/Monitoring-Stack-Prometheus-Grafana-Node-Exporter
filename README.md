@@ -11,6 +11,53 @@
 
 ---
 
+## Architektura
+
+```mermaid
+graph TB
+    subgraph BROWSER["Przeglądarka"]
+        B1["localhost:3000"]
+        B2["localhost:9090"]
+        B3["localhost:9093"]
+    end
+
+    subgraph HOST["Host System — Linux / Windows + Docker Desktop"]
+        subgraph DOCKER["Sieć Docker (bridge)"]
+            direction TB
+            NE["node_exporter\n─────────────\nPort: 9100\nZbiera metryki hosta\n(CPU, RAM, dysk, sieć)"]
+            PROM["Prometheus\n─────────────\nPort: 9090\nScrape · TSDB · Ewaluacja reguł"]
+            AM["Alertmanager\n─────────────\nPort: 9093\nRouting · Grouping · Silencing"]
+            GF["Grafana\n─────────────\nPort: 3000\nDashboardy · Wizualizacja"]
+        end
+
+        subgraph VOLUMES["Pliki lokalne (bind mount)"]
+            direction TB
+            DB1[("data/prometheus\nWAL · Bloki TSDB\nRetencja: 7 dni")]
+            DB2[("data/grafana\nDashboardy · Pluginy")]
+            CFG1["Prometheus/\nprometheus.yml\nrules/wal_alert.yml"]
+            CFG2["alertmanager/\nalertmanager.yml\nsecrets/gmail_password"]
+        end
+    end
+
+    SMTP["Gmail SMTP\n─────────────\nsmtp.gmail.com:587\nTLS"]
+
+    NE -->|"HTTP scrape co 15s"| PROM
+    PROM -->|"PromQL /api/v1/query"| GF
+    PROM -->|"HTTP POST — firing alert"| AM
+    AM -->|"SMTP TLS"| SMTP
+
+    PROM <-->|"R/W"| DB1
+    PROM <-->|"R"| CFG1
+    GF <-->|"R/W"| DB2
+    AM <-->|"R"| CFG2
+
+    B1 -->|"HTTP"| GF
+    B2 -->|"HTTP"| PROM
+    B3 -->|"HTTP"| AM
+```
+
+---
+
 ## Uruchamianie
 
 ```bash
