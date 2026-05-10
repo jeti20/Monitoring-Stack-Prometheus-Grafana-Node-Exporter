@@ -270,6 +270,15 @@ UI Alertmanagera: `http://localhost:9093`
 
 ## Reguły alertów (PromQL)
 
+Prometheus wie o regułach dzięki sekcji `rule_files` w `prometheus.yml`:
+
+```yaml
+rule_files:
+  - "rules/*.yml"
+```
+
+To glob pattern — Prometheus wczytuje wszystkie pliki `.yml` z folderu `rules/` i ewaluuje je co `evaluation_interval` (15s). Każdy plik może zawierać wiele grup reguł. Prometheus rozróżnia typ reguły po słowie kluczowym: `alert:` = reguła alertu, `record:` = recording rule (gotowe zapytanie zapisane jako nowa metryka).
+
 Plik `Prometheus/rules/wal_alert.yml`:
 
 ```yaml
