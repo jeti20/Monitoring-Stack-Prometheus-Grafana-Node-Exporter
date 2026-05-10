@@ -13,16 +13,16 @@ graph TB
     end
 
     subgraph SERVER["Ubuntu Server"]
-        subgraph DOCKER["Sieć Docker (bridge)"]
-            NE["node_exporter\n:9100 (localhost only)"]
-            PROM["Prometheus\n:9090 (localhost only)"]
-            AM["Alertmanager\n:9093 (localhost only)"]
-            GF["Grafana\n:3000 (publiczny)"]
-            LOKI["Loki\n:3100 (localhost only)"]
-            PT["Promtail\n:9080 (localhost only)"]
+        subgraph DOCKER["Sieć Docker (bridge) — wewnętrzna"]
+            NE["node_exporter\nbez wystawionych portów"]
+            PROM["Prometheus\n:9090 → 127.0.0.1 only"]
+            AM["Alertmanager\nbez wystawionych portów"]
+            GF["Grafana\n:3000 → publiczny"]
+            LOKI["Loki\nbez wystawionych portów"]
+            PT["Promtail\nbez wystawionych portów"]
         end
 
-        FW["UFW Firewall\nblokuje 9090, 9093, 9100\n3100, 9080"]
+        FW["UFW Firewall\ndozwolony: 22 (SSH), 3000 (Grafana)"]
         SOCK["/var/run/docker.sock"]
     end
 
@@ -39,7 +39,7 @@ graph TB
     SOCK -.->|"Docker API"| PT
 ```
 
-**Kluczowa różnica od środowiska dev:** Wszystkie porty oprócz Grafany nasłuchują wyłącznie na `127.0.0.1` — są niedostępne z zewnątrz serwera. Prometheus, Alertmanager i Loki nie mają żadnego mechanizmu uwierzytelniania, więc nie mogą być wystawione na internet.
+**Kluczowa różnica od środowiska dev:** node_exporter, Alertmanager, Loki i Promtail nie mają wystawionych portów w ogóle — są dostępne wyłącznie przez wewnętrzną sieć Docker. Prometheus ma port tylko na `127.0.0.1` do debugowania przez admina. Jedynym publicznie dostępnym serwisem jest Grafana na porcie 3000. Prometheus i Alertmanager nie mają mechanizmu uwierzytelniania — wystawienie ich na internet to poważna podatność.
 
 ---
 
@@ -140,13 +140,10 @@ sudo ufw allow OpenSSH
 # Grafana — jedyny serwis dostępny z zewnątrz
 sudo ufw allow 3000/tcp
 
-# Pozostałe porty nasłuchują tylko na 127.0.0.1 (docker-compose.yml)
-# i są niedostępne z zewnątrz — nie wymagają reguł UFW
-
 sudo ufw status verbose
 ```
 
-**Uwaga:** Prometheus (:9090), Alertmanager (:9093), Loki (:3100), Promtail (:9080) i node_exporter (:9100) są związane z `127.0.0.1` w `docker-compose.yml`. Kontenery komunikują się między sobą przez wewnętrzną sieć Docker — firewall ich nie blokuje.
+**Uwaga:** node_exporter, Alertmanager, Loki i Promtail nie mają wystawionych portów w `docker-compose.yml` — są całkowicie niewidoczne dla hosta i internetu. Kontenery komunikują się między sobą przez wewnętrzną sieć Docker, która jest zarządzana przez Docker i nie wymaga reguł UFW. Prometheus ma port tylko na `127.0.0.1` — dostępny wyłącznie lokalnie przez SSH.
 
 ---
 
@@ -221,7 +218,7 @@ W Grafanie sprawdź:
 | Aspekt | Windows + Docker Desktop | Ubuntu On-Premises |
 |---|---|---|
 | node_exporter | metryki VM (WSL2/Hyper-V) | metryki prawdziwego serwera |
-| Porty | wszystkie na `0.0.0.0` | tylko Grafana na `0.0.0.0` |
+| Porty | wszystkie na `0.0.0.0` | tylko Grafana publiczna, reszta bez portów |
 | restart | brak | `unless-stopped` — autostart po crashu |
 | systemd | nie dotyczy | auto-start po restarcie OS |
 | node_exporter pid | nie | `pid: host` — pełna widoczność procesów |
