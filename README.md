@@ -136,6 +136,13 @@ grafana/provisioning/               (host)
     └── node-exporter.json  ←  Grafana wczytuje → dashboard pojawia się automatycznie
 ```
 
+Grafana wie o tej ścieżce bo jest ona zakodowana na sztywno w obrazie `grafana/grafana` w pliku `grafana.ini`:
+```ini
+[paths]
+provisioning = /etc/grafana/provisioning
+```
+Nie konfigurujesz tego nigdzie — Grafana zawsze sprawdza tę ścieżkę przy starcie. Ty tylko dajesz jej tam swoje pliki przez bind mount w `docker-compose.yml`.
+
 **Kolejność wczytywania przy starcie Grafany:**
 1. Wczytuje `datasources/prometheus.yml` → rejestruje Prometheusa jako datasource o nazwie `Prometheus`
 2. Wczytuje `dashboards/dashboard.yml` → dowiaduje się że ma szukać JSON-ów w tym samym folderze
