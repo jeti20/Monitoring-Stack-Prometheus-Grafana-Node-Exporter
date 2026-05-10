@@ -2,8 +2,10 @@
 services:
   node_exporter:
     image: quay.io/prometheus/node-exporter:latest
+    restart: unless-stopped
+    pid: host
     ports:
-      - 9100:9100
+      - 127.0.0.1:9100:9100
     volumes:
       - /proc:/host/proc:ro
       - /sys:/host/sys:ro
@@ -16,9 +18,10 @@ services:
 
   prometheus:
     image: prom/prometheus:latest
+    restart: unless-stopped
     hostname: prometheus.test
     ports:
-      - 9090:9090
+      - 127.0.0.1:9090:9090
     volumes:
       - ./data/prometheus:/prometheus
       - ./Prometheus:/etc/prometheus
@@ -28,8 +31,9 @@ services:
 
   alertmanager:
     image: prom/alertmanager:latest
+    restart: unless-stopped
     ports:
-      - 9093:9093
+      - 127.0.0.1:9093:9093
     volumes:
       - ./alertmanager:/etc/alertmanager
     command:
@@ -37,9 +41,9 @@ services:
 
   loki:
     image: grafana/loki:latest
-    user: root
+    restart: unless-stopped
     ports:
-      - 3100:3100
+      - 127.0.0.1:3100:3100
     volumes:
       - ./loki:/etc/loki
       - ./data/loki:/loki
@@ -48,8 +52,9 @@ services:
 
   promtail:
     image: grafana/promtail:latest
+    restart: unless-stopped
     ports:
-      - 9080:9080
+      - 127.0.0.1:9080:9080
     volumes:
       - ./promtail:/etc/promtail
       - /var/log:/var/log:ro
@@ -60,6 +65,7 @@ services:
 
   grafana:
     image: grafana/grafana:latest
+    restart: unless-stopped
     ports:
       - 3000:3000
     volumes:
