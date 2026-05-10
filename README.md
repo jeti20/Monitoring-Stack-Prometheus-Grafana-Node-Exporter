@@ -1,18 +1,5 @@
 # Monitoring Stack — Prometheus + Grafana + Node Exporter + Alertmanager + Loki + Promtail
 
-## Stos
-
-| Serwis | Port | Opis |
-|---|---|---|
-| node_exporter | 9100 | zbiera metryki systemu (CPU, RAM, dysk, sieć) |
-| prometheus | 9090 | scrape metryk, przechowywanie TSDB, ewaluacja reguł alertów |
-| grafana | 3000 | wizualizacja metryk i logów |
-| alertmanager | 9093 | odbiera alerty od Prometheusa, wysyła powiadomienia (email) |
-| loki | 3100 | agregacja i przechowywanie logów |
-| promtail | 9080 | agent zbierający logi i wysyłający je do Loki |
-
----
-
 ## Architektura
 
 ```mermaid
@@ -82,6 +69,19 @@ graph TB
     CFG2 -.->|"walidacja"| J2
     CFG1 -.->|"walidacja"| J3
 ```
+
+---
+
+## Stos
+
+| Serwis | Port | Opis |
+|---|---|---|
+| node_exporter | 9100 | zbiera metryki systemu (CPU, RAM, dysk, sieć) |
+| prometheus | 9090 | scrape metryk, przechowywanie TSDB, ewaluacja reguł alertów |
+| grafana | 3000 | wizualizacja metryk i logów |
+| alertmanager | 9093 | odbiera alerty od Prometheusa, wysyła powiadomienia (email) |
+| loki | 3100 | agregacja i przechowywanie logów |
+| promtail | 9080 | agent zbierający logi i wysyłający je do Loki |
 
 ---
 
