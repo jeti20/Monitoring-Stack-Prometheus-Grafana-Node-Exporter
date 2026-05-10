@@ -33,9 +33,10 @@ graph TB
         subgraph VOLUMES["Pliki lokalne (bind mount)"]
             direction TB
             DB1[("data/prometheus\nWAL · Bloki TSDB\nRetencja: 7 dni")]
-            DB2[("data/grafana\nDashboardy · Pluginy")]
+            DB2[("data/grafana\nStan · Pluginy")]
             CFG1["Prometheus/\nprometheus.yml\nrules/wal_alert.yml"]
             CFG2["alertmanager/\nalertmanager.yml\nsecrets/gmail_password"]
+            CFG3["grafana/provisioning/\ndatasources/prometheus.yml\ndashboards/dashboard.yml\ndashboards/node-exporter.json"]
         end
     end
 
@@ -49,6 +50,7 @@ graph TB
     PROM <-->|"R/W"| DB1
     PROM <-->|"R"| CFG1
     GF <-->|"R/W"| DB2
+    GF -->|"R — przy starcie"| CFG3
     AM <-->|"R"| CFG2
 
     B1 -->|"HTTP"| GF
@@ -82,9 +84,16 @@ docker compose down
 │   ├── alertmanager.yml          # konfiguracja Alertmanagera (receiver, smtp)
 │   └── secrets/
 │       └── gmail_password        # hasło App Password (w .gitignore — nie trafia do gita)
+├── grafana/
+│   └── provisioning/
+│       ├── datasources/
+│       │   └── prometheus.yml    # automatyczna konfiguracja datasource Prometheusa
+│       └── dashboards/
+│           ├── dashboard.yml     # mówi Grafanie gdzie szukać plików JSON z dashboardami
+│           └── node-exporter.json # dashboard Node Exporter Full (ID: 1860 z grafana.com)
 └── data/
     ├── prometheus/               # dane TSDB Prometheusa (bind mount)
-    └── grafana/                  # dashboardy i ustawienia Grafany (bind mount)
+    └── grafana/                  # stan Grafany — pluginy, sesje (bind mount)
 ```
 
 ### Za co odpowiada każdy plik
@@ -103,6 +112,36 @@ docker compose down
 **`alertmanager/alertmanager.yml`** — konfiguracja Alertmanagera: do kogo wysłać alert (receiver) i jaką metodą (email przez SMTP Gmail). Hasło nie jest tu wpisane na sztywno — Alertmanager czyta je z pliku przez `auth_password_file`.
 
 **`alertmanager/secrets/gmail_password`** — plik zawierający wyłącznie App Password do Gmaila. Plik lokalny, nigdy nie trafia do repozytorium. Alertmanager czyta go przy każdym wysyłaniu emaila.
+
+**`grafana/provisioning/datasources/prometheus.yml`** — Grafana czyta ten plik przy starcie i automatycznie dodaje Prometheusa jako datasource. Bez tego trzeba by klikać ręcznie w UI po każdym `docker compose up`.
+
+**`grafana/provisioning/dashboards/dashboard.yml`** — mówi Grafanie żeby szukała plików JSON z dashboardami w folderze `/etc/grafana/provisioning/dashboards/`. Grafana wczytuje je automatycznie przy starcie.
+
+**`grafana/provisioning/dashboards/node-exporter.json`** — definicja dashboardu Node Exporter Full (ID: 1860 z grafana.com). Pobrana przez API: `https://grafana.com/api/dashboards/1860/revisions/latest/download`. Zawiera panele CPU, RAM, dysk, sieć.
+
+---
+
+## Grafana Provisioning
+
+Provisioning = konfiguracja Grafany jako kod. Zamiast klikać w UI, Grafana przy starcie automatycznie wczytuje pliki z `/etc/grafana/provisioning/` i konfiguruje się sama.
+
+```
+grafana/provisioning/               (host)
+        ↕ bind mount
+/etc/grafana/provisioning/          (kontener)
+├── datasources/
+│   └── prometheus.yml   ←  Grafana czyta przy starcie → dodaje datasource Prometheus
+└── dashboards/
+    ├── dashboard.yml    ←  Grafana czyta przy starcie → wie gdzie szukać JSON-ów
+    └── node-exporter.json  ←  Grafana wczytuje → dashboard pojawia się automatycznie
+```
+
+**Kolejność wczytywania przy starcie Grafany:**
+1. Wczytuje `datasources/prometheus.yml` → rejestruje Prometheusa jako datasource o nazwie `Prometheus`
+2. Wczytuje `dashboards/dashboard.yml` → dowiaduje się że ma szukać JSON-ów w tym samym folderze
+3. Wczytuje `dashboards/node-exporter.json` → ładuje dashboard Node Exporter Full
+
+Dashboardy załadowane przez provisioning są **read-only w UI** — nie można ich edytować przez przeglądarkę. Zmiany wprowadza się przez edycję pliku JSON i restart kontenera.
 
 ---
 
