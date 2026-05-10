@@ -17,7 +17,7 @@ trap 'rm -rf "$TMP"' EXIT
 
 # --- Grafana (apt) ---
 
-sudo apt-get install -y apt-transport-https wget
+sudo apt-get install -y apt-transport-https wget unzip
 sudo mkdir -p /etc/apt/keyrings
 wget -q -O - https://apt.grafana.com/gpg.key \
   | gpg --dearmor | sudo tee /etc/apt/keyrings/grafana.gpg >/dev/null

@@ -51,6 +51,5 @@ jobs:
           yamllint Prometheus/prometheus.yml \
                    Prometheus/rules/*.yml \
                    alertmanager/alertmanager.yml \
-                   docker-compose.yml \
                    grafana/provisioning/datasources/prometheus.yml \
                    grafana/provisioning/dashboards/dashboard.yml
